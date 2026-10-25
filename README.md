@@ -27,15 +27,8 @@ datos de apoyo.
 
 ## Instalación
 
-Con Git:
-
-```powershell
-git clone https://github.com/GaspachoE/propiedades-rm.git
-cd propiedades-rm
-```
-
-Sin Git: en esta página, pulsa **Code → Download ZIP**, descomprime la carpeta y
-ábrela en una terminal.
+Pulsa **Code → Download ZIP**, descomprime la carpeta y
+ábrela en una terminal (VS Code por ejemplo).
 
 Luego, dentro de la carpeta del proyecto, crea el entorno virtual e instala las
 librerías:
