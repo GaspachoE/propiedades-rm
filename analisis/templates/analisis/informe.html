@@ -1,0 +1,42 @@
+{% extends 'analisis/base.html' %}
+{% block titulo %}Informe: {{ datos.titulo }}{% endblock %}
+{% block contenido %}
+<h1 class="h3 mb-2">Informe: {{ datos.titulo }}</h1>
+<p class="text-muted">{{ datos.pregunta }}</p>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-body">
+    <h2 class="h5">Análisis</h2>
+    {% for parrafo in datos.analisis %}
+    <p class="mb-2">{{ parrafo }}</p>
+    {% endfor %}
+  </div>
+</div>
+
+<h2 class="h5">Datos de apoyo</h2>
+<div class="table-responsive">
+  <table class="table table-striped table-bordered bg-white">
+    <thead>
+      <tr>
+        {% for columna in columnas %}
+        <th scope="col">{{ columna }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for fila in filas %}
+      <tr>
+        {% for celda in fila %}
+        <td>{{ celda }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p class="small text-muted">
+  Fuente: dataset “Precios Casas RM” (Kaggle, marzo de 2023), después de la limpieza de nulos y outliers.
+</p>
+<a class="btn btn-outline-primary" href="{% url datos.grafico %}">Ver gráfico</a>
+{% endblock %}

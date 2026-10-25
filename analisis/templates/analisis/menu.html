@@ -1,0 +1,62 @@
+<nav
+  class="sidebar offcanvas-lg offcanvas-start bg-white border-end"
+  tabindex="-1"
+  id="menuPrincipal"
+  aria-label="Navegación principal"
+>
+  <div class="offcanvas-header d-lg-none">
+    <h5 class="offcanvas-title">Propiedades</h5>
+    <button
+      type="button"
+      class="btn-close"
+      data-bs-dismiss="offcanvas"
+      data-bs-target="#menuPrincipal"
+      aria-label="Cerrar menú"
+    ></button>
+  </div>
+
+  <div class="offcanvas-body d-flex flex-column p-3">
+    <a
+      class="navbar-brand fs-4 mb-3 d-none d-lg-block"
+      href="{% url 'index' %}"
+    >
+      Propiedades
+    </a>
+    <hr class="d-none d-lg-block mt-0" />
+
+    <ul class="nav nav-pills flex-column">
+
+      <!-- Gráficos -->
+      <li class="nav-item">
+        {% with nombre_actual=request.resolver_match.url_name %}
+        <a
+          class="nav-link dropdown-toggle"
+          data-bs-toggle="collapse"
+          href="#submenuGraficos"
+          role="button"
+          aria-expanded="{% if 'grafico' in nombre_actual or nombre_actual == 'informe' %}true{% else %}false{% endif %}"
+          aria-controls="submenuGraficos"
+        >
+          Gráficos
+        </a>
+        <div
+          class="collapse {% if 'grafico' in nombre_actual or nombre_actual == 'informe' %}show{% endif %}"
+          id="submenuGraficos"
+        >
+          <ul class="nav nav-pills flex-column ms-3">
+            {% include 'analisis/menu_grafico.html' with nombre="Distribución de variables" url_name="grafico1" numero=1 %}
+            {% include 'analisis/menu_grafico.html' with nombre="Comunas con más publicaciones" url_name="grafico2" numero=2 %}
+            {% include 'analisis/menu_grafico.html' with nombre="Precio por comuna y sector" url_name="grafico3" numero=3 %}
+            {% include 'analisis/menu_grafico.html' with nombre="Mapa de precios" url_name="grafico4" numero=4 %}
+            {% include 'analisis/menu_grafico.html' with nombre="Precio según dormitorios" url_name="grafico5" numero=5 %}
+            {% include 'analisis/menu_grafico.html' with nombre="Precio según estacionamientos" url_name="grafico6" numero=6 %}
+            {% include 'analisis/menu_grafico.html' with nombre="Corredor por comuna y sector" url_name="grafico7" numero=7 %}
+            {% include 'analisis/menu_grafico.html' with nombre="Corredor: comparación global" url_name="grafico8" numero=8 %}
+            {% include 'analisis/menu_grafico.html' with nombre="Precio por m² según comuna" url_name="grafico9" numero=9 %}
+          </ul>
+        </div>
+        {% endwith %}
+      </li>
+    </ul>
+  </div>
+</nav>

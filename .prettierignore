@@ -1,0 +1,2 @@
+# Evita que Prettier rompa las etiquetas {% ... %} de Django
+analisis/templates/
