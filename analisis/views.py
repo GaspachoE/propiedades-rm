@@ -297,44 +297,61 @@ def grafico5(request):
 
 
 def grafico6(request):
-    orden_rango = ["0", "1-2", "3-4", "5+"]
+    orden_parking = ["0", "1", "2", "3", "4", "5+"]
     n_cols = 2
     n_rows = 3
 
-    sectores = [
-    "Oriente",
-    "Centro",
-    "Sur",
-    "Suroriente",
-    "Norte",
-    "Poniente / Periferia"
-    ]
-    precio_por_rango_sector = (df_limpio.groupby(["Sector", "Rango_Parking"])["Price_CLP"].mean())
+    sectores = ["Oriente", "Centro", "Sur", "Suroriente", "Norte", "Poniente / Periferia"]
+
+    datos = df_limpio.copy()
+    cantidad = pd.to_numeric(datos["Parking"], errors="coerce")
+
+    validos = cantidad.notna() & (cantidad >= 0) & (cantidad % 1 == 0)
+    datos = datos.loc[validos].copy()
+    cantidad = cantidad.loc[validos]
+
+    datos["Grupo_Parking"] = (cantidad.clip(upper=5).astype(int).astype(str).replace({"5": "5+"}))
+
+    precio_por_sector = (
+        datos.groupby(["Sector", "Grupo_Parking"])["Price_CLP"]
+        .mean()
+        .unstack("Grupo_Parking")
+        .reindex(index=sectores, columns=orden_parking)
+    )
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(13, 5 * n_rows))
     axes = np.array(axes).reshape(-1)
 
     for i, sector in enumerate(sectores):
         ax = axes[i]
-        precios = precio_por_rango_sector.loc[sector].reindex(orden_rango)
+        precios = precio_por_sector.loc[sector]
+        x = np.arange(len(orden_parking))
 
-        ax.bar(precios.index, precios.values)
+        ax.plot(x, precios.values, marker="o", linewidth=2)
+        ax.set_xticks(x)
+        ax.set_xticklabels(orden_parking)
         ax.set_title(f"Sector {sector}", fontsize=11, fontweight="bold")
         ax.set_xlabel("Cantidad de Estacionamientos")
         ax.set_ylabel("Precio Promedio (CLP)")
-        for x, v in enumerate(precios.values):
-            if pd.notna(v):
-                ax.text(x, v, f"{v:,.0f}", ha="center", va="bottom", fontsize=8)
+        ax.ticklabel_format(axis="y", style="plain")
+        ax.margins(y=0.15)
+
+        for posicion, valor in enumerate(precios.values):
+            if pd.notna(valor):
+                ax.annotate(
+                    f"{valor:,.0f}",
+                    xy=(posicion, valor), xytext=(0, 8), textcoords="offset points", ha="center", fontsize=8)
+
         ax.grid(axis="y", linestyle=":", alpha=0.4)
 
-    for j in range(len(sectores), len(axes)):
-        fig.delaxes(axes[j])
+    for j in range(len(sectores), len(axes)): fig.delaxes(axes[j])
 
-    fig.suptitle("Precio Promedio segun Cantidad de Estacionamientos, por Sector", fontsize=14, fontweight="bold", y=1.02)
-    plt.tight_layout()
+    fig.suptitle("Precio Promedio según Cantidad de Estacionamientos, por Sector", fontsize=14, fontweight="bold")
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
+
     grafico = figura_a_base64(fig)
-    return render(request, "analisis/grafico_simple.html",
-              {"grafico": grafico, "titulo": "Precio según estacionamientos", "numero": 6})
+
+    return render(request, "analisis/grafico_simple.html", {"grafico": grafico, "titulo": "Precio según estacionamientos", "numero": 6})
 
 def grafico7(request):  
     sectores = [s for s in df_limpio['Sector'].unique() if s != 'Sin clasificar']
