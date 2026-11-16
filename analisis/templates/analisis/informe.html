@@ -38,5 +38,9 @@
 <p class="small text-muted">
   Fuente: dataset “Precios Casas RM” (Kaggle, marzo de 2023), después de la limpieza de nulos y outliers.
 </p>
-<a class="btn btn-outline-primary" href="{% url datos.grafico %}">Ver gráfico</a>
+<div class="d-flex flex-wrap gap-2">
+  <a class="btn btn-outline-primary" href="{% url datos.grafico %}">Ver gráfico</a>
+  <a class="btn btn-danger" href="{% url 'informe_pdf' numero %}">Descargar informe (PDF)</a>
+  <a class="btn btn-success" href="{% url 'informe_excel' numero %}">Descargar datos (Excel)</a>
+</div>
 {% endblock %}
