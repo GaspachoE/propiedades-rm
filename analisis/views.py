@@ -522,7 +522,7 @@ INFORMES = {
         "pregunta": "¿Cómo influye la presencia de estacionamiento en el precio final?",
         "grafico": "grafico6",
         "analisis": [
-            "En algunos sectores, las propiedades con 5 o más estacionamientos llegan a casi el doble del precio de las que no tienen.” por “En varios sectores (Centro, Suroriente y Norte), las propiedades con 5 o más estacionamientos cuestan casi el doble o más que las que no tienen.",
+            "En varios sectores (Centro, Suroriente y Norte), las propiedades con 5 o más estacionamientos cuestan casi el doble o más que las que no tienen.",
             "En el sector Oriente el aumento es más moderado en términos relativos (de unos 586 a unos 746 millones entre “0” y “5+”), porque sus precios base ya son muy altos.",
             "La categoría “0” no sigue el patrón porque mezcla propiedades sin estacionamiento con propiedades donde el dato no fue reportado (los nulos se reemplazaron por 0). Además, más estacionamientos suelen ir de la mano con más dormitorios y más área.",
         ],
@@ -642,5 +642,140 @@ def informe(request, numero):
     if datos is None:
         raise Http404("Informe no encontrado")
     columnas, filas = tabla_informe(numero)
-    contexto = {"datos": datos, "columnas": columnas, "filas": filas}
+    contexto = {"datos": datos, "columnas": columnas, "filas": filas, "numero": numero}
     return render(request, "analisis/informe.html", contexto)
+
+import re
+from datetime import date
+from io import BytesIO
+from xml.sax.saxutils import escape
+
+from django.http import HttpResponse
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import cm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
+
+def datos_grafico(numero):
+    """DataFrame con los datos que usa cada gráfico (valores numéricos, sin formato)."""
+    df = df_limpio
+
+    if numero == 1:
+        return df[["Price_UF", "Built Area", "Dorms", "Baths"]]
+
+    if numero == 2:
+        return (df["Comuna"].value_counts().head(10)
+                .rename_axis("Comuna").reset_index(name="Publicaciones"))
+
+    if numero == 3:
+        return df[["Sector", "Comuna", "Price_UF"]]
+
+    if numero == 4:
+        return (df.groupby("Comuna")
+                .agg(Sector=("Sector", "first"), Precio_promedio_UF=("Price_UF", "mean"))
+                .reset_index())
+
+    if numero == 5:
+        g = df.groupby("Rango_Dorms", observed=True)["Price_CLP"].mean() / 1_000_000
+        g = g.rename("Precio promedio (millones de CLP)").reset_index()
+        g["Rango_Dorms"] = g["Rango_Dorms"].astype(str)
+        return g
+
+    if numero == 6:
+        t = (df.groupby(["Sector", "Rango_Parking"], observed=True)["Price_CLP"]
+             .mean().unstack())
+        t.columns = [f"{c} estacionamientos (CLP)" for c in t.columns]
+        return t.reset_index()
+
+    if numero == 7:
+        t = (df.groupby(["Sector", "Comuna", "Con_Corredor"])["Price_UF"]
+             .mean().unstack("Con_Corredor"))
+        t.columns.name = None
+        return t.reset_index()
+
+    if numero == 8:
+        g = df.groupby("Con_Corredor")["Price_UF"].mean()
+        g = g.reindex(["Con Corredor", "Sin Corredor"])
+        return g.rename("Precio promedio (UF)").reset_index()
+
+    if numero == 9:
+        g = df.groupby("Comuna")["Precio_m2"].mean().sort_values(ascending=False)
+        return g.rename("Precio promedio por m2 (CLP)").reset_index()
+
+    return pd.DataFrame()
+
+
+def informe_excel(request, numero):
+    if numero not in INFORMES:
+        raise Http404("Informe no encontrado")
+    datos = datos_grafico(numero).round(2)
+
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as escritor:
+        datos.to_excel(escritor, sheet_name="Datos del gráfico", index=False)
+        hoja = escritor.sheets["Datos del gráfico"]
+        hoja.freeze_panes = "A2"   # deja fija la fila de títulos
+        for columna in hoja.columns:   # ancho de cada columna según su contenido
+            largo = max(len(str(celda.value)) for celda in columna[:200] if celda.value is not None)
+            hoja.column_dimensions[columna[0].column_letter].width = min(largo + 3, 45)
+
+    respuesta = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    respuesta["Content-Disposition"] = f'attachment; filename="grafico_{numero}_datos.xlsx"'
+    return respuesta
+
+
+def informe_pdf(request, numero):
+    datos = INFORMES.get(numero)
+    if datos is None:
+        raise Http404("Informe no encontrado")
+    columnas, filas = tabla_informe(numero)
+
+    estilos = getSampleStyleSheet()
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=A4, title=f"Informe: {datos['titulo']}",
+        leftMargin=2 * cm, rightMargin=2 * cm, topMargin=2 * cm, bottomMargin=2 * cm,
+    )
+
+    contenido = [
+        Paragraph(f"Informe: {escape(datos['titulo'])}", estilos["Title"]),
+        Paragraph(escape(datos["pregunta"]), estilos["Italic"]),
+        Spacer(1, 0.5 * cm),
+        Paragraph("Análisis", estilos["Heading2"]),
+    ]
+    for parrafo in datos["analisis"]:
+        contenido += [Paragraph(escape(parrafo), estilos["BodyText"]), Spacer(1, 0.2 * cm)]
+
+    tabla = Table([columnas] + filas, repeatRows=1)
+    tabla.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2874A6")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F2F5F8")]),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#B0B7BF")),
+        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    contenido += [
+        Spacer(1, 0.4 * cm),
+        Paragraph("Datos de apoyo", estilos["Heading2"]),
+        tabla,
+        Spacer(1, 0.5 * cm),
+        Paragraph(
+            "Fuente: dataset “Precios Casas RM” (Kaggle, marzo de 2023), después de la "
+            f"limpieza de nulos y outliers. Generado el {date.today():%d/%m/%Y}.",
+            estilos["Italic"],
+        ),
+    ]
+    doc.build(contenido)
+
+    respuesta = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+    respuesta["Content-Disposition"] = f'attachment; filename="informe_{numero}.pdf"'
+    return respuesta
