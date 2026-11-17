@@ -1,0 +1,27 @@
+{% extends 'analisis/base.html' %}
+{% block titulo %}{{ titulo }}{% endblock %}
+{% block contenido %}
+<h1 class="h3 mb-2">{{ titulo }}</h1>
+<p class="text-muted">
+  Muestra el precio promedio (en UF) de las casas usadas de cada comuna.
+  Variables: <strong>Comuna</strong> (eje vertical) y <strong>Precio promedio en UF</strong> (eje horizontal).
+  Use los filtros para cambiar qué publicaciones se consideran; el gráfico se actualiza al presionar “Aplicar”.
+</p>
+{% include 'analisis/filtros_dinamicos.html' %}
+{% if grafico %}
+<p class="small text-muted">
+  {% for nombre, valor in filtros_texto.items %}<span class="badge text-bg-secondary me-1">{{ nombre }}: {{ valor }}</span>{% endfor %}
+  — {{ n }} publicaciones en {{ n_comunas }} comunas.
+</p>
+<div class="card shadow-sm">
+  <div class="card-body text-center">
+    <img src="data:image/png;base64,{{ grafico }}" class="img-fluid rounded" alt="{{ titulo }}" />
+  </div>
+</div>
+{% else %}
+<div class="alert alert-warning" role="alert">
+  No hay propiedades que cumplan los filtros seleccionados. Pruebe con otro sector, otro rango de dormitorios o un rango de precio más amplio.
+</div>
+{% endif %}
+<a class="btn btn-primary mt-3" href="{% url 'informe' numero %}{% if qs %}?{{ qs }}{% endif %}">Ver informe</a>
+{% endblock %}

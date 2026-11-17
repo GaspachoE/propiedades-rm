@@ -1,0 +1,33 @@
+<form method="get" class="card shadow-sm mb-4">
+  <div class="card-body">
+    <h2 class="h6 mb-3">Filtros</h2>
+    <div class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label for="sector" class="form-label">Sector</label>
+        <select class="form-select" name="sector" id="sector">
+          <option value="">Todos</option>
+          {% for s in sectores %}<option value="{{ s }}" {% if s == f_sector %}selected{% endif %}>{{ s }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label for="dorms" class="form-label">Dormitorios</label>
+        <select class="form-select" name="dorms" id="dorms">
+          <option value="">Todos</option>
+          {% for r in rangos_dorms %}<option value="{{ r }}" {% if r == f_dorms %}selected{% endif %}>{{ r }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label for="precio_min" class="form-label">Precio mín. (UF)</label>
+        <input type="number" min="0" step="any" class="form-control" name="precio_min" id="precio_min" value="{{ f_precio_min }}" />
+      </div>
+      <div class="col-md-2">
+        <label for="precio_max" class="form-label">Precio máx. (UF)</label>
+        <input type="number" min="0" step="any" class="form-control" name="precio_max" id="precio_max" value="{{ f_precio_max }}" />
+      </div>
+      <div class="col-md-2 d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Aplicar</button>
+        <a class="btn btn-outline-secondary" href="?">Limpiar</a>
+      </div>
+    </div>
+  </div>
+</form>

@@ -3,11 +3,12 @@
 {% block contenido %}
 <h1 class="h3 mb-2">Informe: {{ datos.titulo }}</h1>
 <p class="text-muted">{{ datos.pregunta }}</p>
+{% if numero == 10 %}{% include 'analisis/filtros_dinamicos.html' %}{% endif %}
 
 <div class="card shadow-sm mb-4">
   <div class="card-body">
     <h2 class="h5">Análisis</h2>
-    {% for parrafo in datos.analisis %}
+    {% for parrafo in analisis %}
     <p class="mb-2">{{ parrafo }}</p>
     {% endfor %}
   </div>
@@ -39,8 +40,8 @@
   Fuente: dataset “Precios Casas RM” (Kaggle, marzo de 2023), después de la limpieza de nulos y outliers.
 </p>
 <div class="d-flex flex-wrap gap-2">
-  <a class="btn btn-outline-primary" href="{% url datos.grafico %}">Ver gráfico</a>
-  <a class="btn btn-danger" href="{% url 'informe_pdf' numero %}">Descargar informe (PDF)</a>
-  <a class="btn btn-success" href="{% url 'informe_excel' numero %}">Descargar datos (Excel)</a>
+  <a class="btn btn-outline-primary" href="{% url datos.grafico %}{% if qs %}?{{ qs }}{% endif %}">Ver gráfico</a>
+  <a class="btn btn-danger" href="{% url 'informe_pdf' numero %}{% if qs %}?{{ qs }}{% endif %}">Descarga en PDF</a>
+  <a class="btn btn-success" href="{% url 'informe_excel' numero %}{% if qs %}?{{ qs }}{% endif %}">Descarga en Excel</a>
 </div>
 {% endblock %}
