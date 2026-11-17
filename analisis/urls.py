@@ -13,6 +13,7 @@ urlpatterns = [
     path("grafico7", views.grafico7, name="grafico7"),
     path("grafico8", views.grafico8, name="grafico8"),
     path("grafico9", views.grafico9, name="grafico9"),
+    path("grafico10", views.grafico10, name="grafico10"),
     path("informe/<int:numero>", views.informe, name="informe"),
     path("informe/<int:numero>/pdf", views.informe_pdf, name="informe_pdf"),
     path("informe/<int:numero>/excel", views.informe_excel, name="informe_excel")
