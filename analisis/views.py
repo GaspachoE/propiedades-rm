@@ -556,6 +556,13 @@ INFORMES = {
     },
 }
 
+INFORMES[10] = {
+    "titulo": "Precio por comuna (gráfico dinámico)",
+    "pregunta": "¿Cuánto cuestan en promedio las casas de cada comuna según el sector, los dormitorios y el rango de precio que elija el usuario?",
+    "grafico": "grafico10",
+    "analisis": [],   # se arma en analisis_informe(), porque depende de los filtros
+}
+
 
 def fmt(valor, decimales=0):
     """Formato chileno: 1.234.567 o 1.234,5"""
@@ -565,9 +572,16 @@ def fmt(valor, decimales=0):
     return texto.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def tabla_informe(numero):
+def tabla_informe(numero, get=None):
     """Devuelve (columnas, filas) con los datos de apoyo de cada informe."""
     df = df_limpio
+
+    if numero == 10:
+        g, _, _ = datos_dinamico(get)
+        filas = [[r["Comuna"], r["Sector"], fmt(r["Publicaciones"]),
+                  fmt(r["Precio promedio (UF)"], 1), fmt(r["Precio mediano (UF)"], 1)]
+                 for _, r in g.iterrows()]
+        return list(g.columns), filas
 
     if numero == 1:
         variables = {"Price_UF": "Precio (UF)", "Dorms": "Dormitorios", "Baths": "Baños",
@@ -641,8 +655,12 @@ def informe(request, numero):
     datos = INFORMES.get(numero)
     if datos is None:
         raise Http404("Informe no encontrado")
-    columnas, filas = tabla_informe(numero)
-    contexto = {"datos": datos, "columnas": columnas, "filas": filas, "numero": numero}
+    columnas, filas = tabla_informe(numero, request.GET)
+    contexto = {"datos": datos, "analisis": analisis_informe(numero, request.GET),
+                "columnas": columnas, "filas": filas, "numero": numero,
+                "qs": request.GET.urlencode() if numero == 10 else ""}
+    if numero == 10:
+        contexto.update(contexto_filtros(request.GET))
     return render(request, "analisis/informe.html", contexto)
 
 import re
@@ -658,9 +676,12 @@ from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
 
-def datos_grafico(numero):
+def datos_grafico(numero, get=None):
     """DataFrame con los datos que usa cada gráfico (valores numéricos, sin formato)."""
     df = df_limpio
+
+    if numero == 10:
+        return datos_dinamico(get)[0]
 
     if numero == 1:
         return df[["Price_UF", "Built Area", "Dorms", "Baths"]]
@@ -710,11 +731,17 @@ def datos_grafico(numero):
 def informe_excel(request, numero):
     if numero not in INFORMES:
         raise Http404("Informe no encontrado")
-    datos = datos_grafico(numero).round(2)
+    datos = datos_grafico(numero, request.GET).round(2)
 
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as escritor:
         datos.to_excel(escritor, sheet_name="Datos del gráfico", index=False)
+        if numero == 10:   # segunda hoja con los filtros que se usaron
+            pd.DataFrame({"Filtro": list(filtros_texto(request.GET).keys()),
+                          "Valor": list(filtros_texto(request.GET).values())}
+                         ).to_excel(escritor, sheet_name="Filtros aplicados", index=False)
+            escritor.sheets["Filtros aplicados"].column_dimensions["A"].width = 28
+            escritor.sheets["Filtros aplicados"].column_dimensions["B"].width = 30
         hoja = escritor.sheets["Datos del gráfico"]
         hoja.freeze_panes = "A2"   # deja fija la fila de títulos
         for columna in hoja.columns:   # ancho de cada columna según su contenido
@@ -733,7 +760,7 @@ def informe_pdf(request, numero):
     datos = INFORMES.get(numero)
     if datos is None:
         raise Http404("Informe no encontrado")
-    columnas, filas = tabla_informe(numero)
+    columnas, filas = tabla_informe(numero, request.GET)
 
     estilos = getSampleStyleSheet()
     buffer = BytesIO()
@@ -748,7 +775,7 @@ def informe_pdf(request, numero):
         Spacer(1, 0.5 * cm),
         Paragraph("Análisis", estilos["Heading2"]),
     ]
-    for parrafo in datos["analisis"]:
+    for parrafo in analisis_informe(numero, request.GET):
         contenido += [Paragraph(escape(parrafo), estilos["BodyText"]), Spacer(1, 0.2 * cm)]
 
     tabla = Table([columnas] + filas, repeatRows=1)
@@ -779,3 +806,116 @@ def informe_pdf(request, numero):
     respuesta = HttpResponse(buffer.getvalue(), content_type="application/pdf")
     respuesta["Content-Disposition"] = f'attachment; filename="informe_{numero}.pdf"'
     return respuesta
+
+
+# ===================================================================
+# GRÁFICO DINÁMICO (10): el usuario elige filtros y los datos se actualizan
+# ===================================================================
+SECTORES = [s for s in ORDEN_SECTORES if s in set(df_limpio["Sector"].dropna())]
+RANGOS_DORMS = [str(c) for c in df_limpio["Rango_Dorms"].cat.categories]
+
+
+def _numero(texto):
+    try:
+        return float(str(texto).replace(",", ".").strip())
+    except ValueError:
+        return None
+
+
+def leer_filtros(get):
+    """Lee y valida los filtros de la URL (si algo es inválido, se ignora)."""
+    sector = get.get("sector", "")
+    dorms = get.get("dorms", "")
+    return {
+        "sector": sector if sector in SECTORES else "",
+        "dorms": dorms if dorms in RANGOS_DORMS else "",
+        "precio_min": _numero(get.get("precio_min", "")),
+        "precio_max": _numero(get.get("precio_max", "")),
+    }
+
+
+def filtros_texto(get):
+    f = leer_filtros(get)
+    return {
+        "Sector": f["sector"] or "Todos",
+        "Dormitorios": f["dorms"] or "Todos",
+        "Precio mínimo (UF)": fmt(f["precio_min"]) if f["precio_min"] is not None else "Sin mínimo",
+        "Precio máximo (UF)": fmt(f["precio_max"]) if f["precio_max"] is not None else "Sin máximo",
+    }
+
+
+def contexto_filtros(get):
+    """Datos para dibujar el formulario de filtros en las plantillas."""
+    f = leer_filtros(get)
+    return {
+        "sectores": SECTORES, "rangos_dorms": RANGOS_DORMS,
+        "f_sector": f["sector"], "f_dorms": f["dorms"],
+        "f_precio_min": get.get("precio_min", "") if f["precio_min"] is not None else "",
+        "f_precio_max": get.get("precio_max", "") if f["precio_max"] is not None else "",
+        "qs": get.urlencode(),
+    }
+
+
+def datos_dinamico(get):
+    """Filtra df_limpio y agrupa por comuna. Devuelve (tabla, filtros, n_publicaciones)."""
+    f = leer_filtros(get)
+    df = df_limpio
+    if f["sector"]:
+        df = df[df["Sector"] == f["sector"]]
+    if f["dorms"]:
+        df = df[df["Rango_Dorms"].astype(str) == f["dorms"]]
+    if f["precio_min"] is not None:
+        df = df[df["Price_UF"] >= f["precio_min"]]
+    if f["precio_max"] is not None:
+        df = df[df["Price_UF"] <= f["precio_max"]]
+    g = (df.groupby("Comuna")
+         .agg(Sector=("Sector", "first"), Publicaciones=("Price_UF", "size"),
+              Precio_prom=("Price_UF", "mean"), Precio_med=("Price_UF", "median"))
+         .reset_index().sort_values("Precio_prom", ascending=False))
+    g = g.rename(columns={"Precio_prom": "Precio promedio (UF)", "Precio_med": "Precio mediano (UF)"})
+    return g.reset_index(drop=True), f, len(df)
+
+
+def analisis_informe(numero, get=None):
+    """Párrafos de análisis. En el informe dinámico dependen de los filtros vigentes."""
+    if numero != 10:
+        return INFORMES[numero]["analisis"]
+    g, _, n = datos_dinamico(get)
+    filtros = "; ".join(f"{k}: {v}" for k, v in filtros_texto(get).items())
+    parrafos = [
+        f"Filtros vigentes — {filtros}.",
+        "Origen de los datos: dataset “Precios Casas RM” (Kaggle, marzo de 2023), ya limpio de nulos y outliers. "
+        "Variables: Comuna y Sector (ubicación), Dormitorios (agrupados en rangos) y Precio en UF.",
+        "Cálculo: primero se filtran las publicaciones según los filtros vigentes y luego se agrupan por comuna; "
+        "para cada comuna se cuenta el número de publicaciones y se calcula el precio promedio y mediano en UF. "
+        "La tabla está ordenada de mayor a menor precio promedio y es exactamente lo que muestra el gráfico.",
+    ]
+    if g.empty:
+        parrafos.append("Interpretación: con estos filtros no hay publicaciones; conviene ampliar el rango de precio o quitar algún filtro.")
+        return parrafos
+    alta, baja = g.iloc[0], g.iloc[-1]
+    parrafos.append(
+        f"Interpretación: hay {fmt(n)} publicaciones repartidas en {len(g)} comunas. "
+        f"La comuna con mayor precio promedio es {alta['Comuna']} ({fmt(alta['Precio promedio (UF)'], 1)} UF) "
+        f"y la menor es {baja['Comuna']} ({fmt(baja['Precio promedio (UF)'], 1)} UF). "
+        "Los promedios de comunas con pocas publicaciones son menos representativos, por eso se muestra también la cantidad."
+    )
+    return parrafos
+
+
+def grafico10(request):
+    g, f, n = datos_dinamico(request.GET)
+    grafico = None
+    if not g.empty:
+        fig, ax = plt.subplots(figsize=(10, max(4, 0.35 * len(g) + 1.5)))
+        ax.barh(g["Comuna"][::-1], g["Precio promedio (UF)"][::-1], color="#2874A6")
+        ax.set_xlabel("Precio promedio (UF)")
+        ax.set_ylabel("Comuna")
+        ax.set_title("Precio promedio por comuna (según filtros)")
+        ax.grid(axis="x", linestyle="--", alpha=0.5)
+        grafico = figura_a_base64(fig)
+    contexto = {"grafico": grafico, "numero": 10, "n": n, "n_comunas": len(g),
+                "titulo": "Precio promedio por comuna (gráfico dinámico)",
+                "filtros_texto": filtros_texto(request.GET)}
+    contexto.update(contexto_filtros(request.GET))
+    return render(request, "analisis/grafico_dinamico.html", contexto)
