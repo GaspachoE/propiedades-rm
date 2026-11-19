@@ -76,10 +76,9 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-El proyecto incluye la base de datos `db.sqlite3` con los datos ya cargados, así
-que no hay que crearla para abrir el sitio.
+En macOS o Linux, el segundo comando es `source .venv/bin/activate`.
 
-Si se borra `db.sqlite3` o se quiere crear desde cero, se usan estos comandos:
+Después crea la base de datos SQLite y carga los datos (solo la primera vez):
 
 ```powershell
 python manage.py migrate
@@ -115,12 +114,8 @@ pandas, numpy, matplotlib, geopandas, Bokeh, reportlab y openpyxl.
 ## Ejecución
 
 ```powershell
-python manage.py migrate
 python manage.py runserver
 ```
-
-`migrate` se ejecuta por si acaso: deja la base de datos al día con los modelos del
-proyecto. Si ya lo está, no cambia nada y los datos no se pierden.
 
 Abre http://127.0.0.1:8000/ en el navegador. La página de inicio redirige al
 primer gráfico, y desde el menú lateral se puede acceder a los demás.
@@ -129,7 +124,9 @@ Para detener el servidor, presiona `Ctrl + C` en la terminal.
 
 ## Despliegue
 
-Sitio publicado en: **http://13.218.100.159:8000**
+Sitio publicado en: **http://3.218.18.208:8000**
+
+Esta IP es Elástica, así que se mantiene aún si se cierra la Instancia en AWS.
 
 El sitio se despliega en una instancia **Amazon EC2** con Ubuntu. La base de datos
 SQLite es un archivo (`db.sqlite3`) que vive en el disco de la misma instancia, así
@@ -143,12 +140,12 @@ que no se necesita un servicio de base de datos aparte.
 4. En **Network settings → Security group**, agregar estas reglas de entrada:
    - SSH, puerto **22**, origen "My IP".
    - Custom TCP, puerto **8000**, origen `0.0.0.0/0` (para entrar al sitio desde cualquier navegador).
-5. Lanzar la instancia y copiar su **IPv4 pública** (En este caso: `13.218.100.159`).
+5. Lanzar la instancia y copiar su **IPv4 pública** (En nuestro caso, `3.218.18.208`).
 
 ### 2. Conectarse e instalar el proyecto
 
 ```bash
-ssh -i mi-llave.pem ubuntu@13.218.100.159
+ssh -i mi-llave.pem ubuntu@54.123.45.67
 
 sudo apt update
 sudo apt install -y python3-venv git
@@ -159,14 +156,19 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Crear la base de datos SQLite en la instancia
-
-El repositorio ya trae `db.sqlite3` con los datos. Para dejar constancia de que la
-base se crea y se carga en la instancia, se puede regenerar ahí mismo:
+Si la instalación se cae por falta de memoria (instancias de 1 GB), crear un
+archivo de intercambio y repetir el `pip install`:
 
 ```bash
-python manage.py migrate        # crea las tablas que falten en db.sqlite3
-python manage.py cargar_datos   # carga (o vuelve a cargar) las 9.291 propiedades del CSV
+sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
+```
+
+### 3. Crear la base de datos SQLite en la instancia
+
+```bash
+python manage.py migrate        # crea db.sqlite3 y la tabla de propiedades
+python manage.py cargar_datos   # carga las 9.291 propiedades del CSV
 ```
 
 ### 4. Configurar Django para la dirección del servidor
@@ -176,7 +178,7 @@ entorno, así que no hay que editar el código. Django solo responde a las
 direcciones que están en `ALLOWED_HOSTS`:
 
 ```bash
-export DJANGO_ALLOWED_HOSTS=13.218.100.159   # IP pública de la instancia
+export DJANGO_ALLOWED_HOSTS=.3.218.18.208  # IP pública de la instancia
 export DJANGO_DEBUG=False                  # no mostrar errores internos al público
 ```
 
@@ -194,7 +196,7 @@ Para detenerlo: `pkill -f runserver`.
 
 ### 6. Comprobar desde un navegador externo
 
-Abrir `http://13.218.100.159:8000` desde otro computador o desde el celular, y
+Abrir `http://54.123.45.67:8000` desde otro computador o desde el celular, y
 revisar los gráficos, el gráfico dinámico con sus filtros, los reportes y las
 descargas en PDF y Excel.
 
@@ -216,7 +218,7 @@ sesión SSH: hay que volver a ejecutar los `export` antes de reiniciar el servid
 ```
 manage.py
 requirements.txt
-db.sqlite3            Base de datos SQLite con las propiedades ya cargadas
+db.sqlite3            Base de datos (se crea con "migrate", no viene en el repositorio)
 propiedades/          Configuración del proyecto Django
 analisis/
 ├── data/
@@ -226,7 +228,7 @@ analisis/
 ├── management/commands/
 │   └── cargar_datos.py   Comando que carga el CSV en la base de datos
 ├── migrations/           Migraciones del modelo Propiedad
-├── templates/analisis/   Plantillas HTML (menú lateral, gráficos, informes y filtros)
+├── templates/analisis/   Plantillas HTML (menú lateral, gráficos, reportes y filtros)
 ├── admin.py              Tabla de propiedades en el panel /admin
 ├── models.py             Modelo Propiedad (tabla de la base de datos)
 ├── views.py              Una vista por gráfico, los informes y las descargas
@@ -240,6 +242,9 @@ analisis/
 - `/informe/1` ... `/informe/10`: informe de cada gráfico
 - `/informe/<n>/pdf` y `/informe/<n>/excel`: descargas de cada informe
 - `/admin`: panel de administración de Django (tabla de propiedades)
+
+El menú lateral tiene dos secciones: **Gráficos** (cada gráfico con su informe) y
+**Reportes** (acceso directo a los diez reportes).
 
 ## Tecnologías
 
