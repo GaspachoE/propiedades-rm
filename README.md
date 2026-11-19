@@ -15,12 +15,6 @@ datos de apoyo. Cada informe se puede descargar en PDF y en Excel.
 
 Profesor: Cristian Orlando García
 
-## Enlaces de entrega
-
-- Sitio desplegado: _(pendiente: dirección del sitio)_
-- Video 1, despliegue del software: _(pendiente: enlace)_
-- Video 2, presentación del software y explicación del código: _(pendiente: enlace)_
-
 ## Contenido
 
 | Gráfico | Qué responde |
@@ -88,10 +82,6 @@ Abre http://127.0.0.1:8000/ en el navegador. La página de inicio redirige al
 primer gráfico, y desde el menú lateral se puede acceder a los demás.
 
 Para detener el servidor, presiona `Ctrl + C` en la terminal.
-
-## Despliegue
-
-_(pendiente: pasos del despliegue y de la base de datos en AWS, y dirección del sitio)_
 
 ## Estructura del proyecto
 
