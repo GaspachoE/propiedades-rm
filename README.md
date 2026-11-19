@@ -18,7 +18,7 @@ Profesor: Cristian Orlando García
 ## Enlaces de entrega
 
 - Sitio desplegado: _(http://3.218.18.208:8000)_
-- Video 1, despliegue del software: _(pendiente: enlace)_
+- Video 1, despliegue del software: _(https://drive.google.com/file/d/1VzAKBf3ShshKiFjQ_P7W6-MvzX37eSNv/view?usp=sharing)_
 - Video 2, presentación del software y explicación del código: _(https://drive.google.com/file/d/1ToWtrkoAGNy48qQs6QkIu2q9pnAKlxYC/view?usp=sharing)_
 
 ## Contenido
