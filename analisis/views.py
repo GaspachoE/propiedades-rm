@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 def grafico1(request):
+    df_limpio = obtener_datos()
     fig, axes = plt.subplots(2, 2, figsize=(13, 9))
 
     # Histograma de precio (UF)
@@ -37,6 +38,7 @@ def grafico1(request):
 
 
 def grafico2(request):
+    df_limpio = obtener_datos()
     top10_comunas = df_limpio["Comuna"].value_counts().head(10)
 
     fig = plt.figure(figsize=(10, 5))
@@ -50,6 +52,7 @@ def grafico2(request):
               {"grafico": grafico, "titulo": "Comunas con más publicaciones", "numero": 2})
 
 def grafico3(request):
+    df_limpio = obtener_datos()
     sectores = [
     s
     for s in df_limpio['Sector'].unique()
@@ -107,6 +110,7 @@ def grafico3(request):
               {"grafico": figura_a_base64(fig), "titulo": "Precio por comuna y sector", "numero": 3})
 
 def grafico4(request):
+    df_limpio = obtener_datos()
     mapa = gpd.read_file(Path(__file__).resolve().parent / "data" / "comunas.geojson")
     mapa_rm = mapa[mapa["Region"] == "Región Metropolitana de Santiago"].copy()
 
@@ -280,6 +284,7 @@ def grafico4(request):
     return render(request, "analisis/mapa.html", contexto)
 
 def grafico5(request):
+    df_limpio = obtener_datos()
     fig, ax = plt.subplots(figsize=(8, 4.8))
     #Una vez creados los rangos observamos la relación con el precio final
     promedio_dorms = df_limpio.groupby("Rango_Dorms", observed=True)["Price_CLP"].mean()
@@ -297,6 +302,7 @@ def grafico5(request):
 
 
 def grafico6(request):
+    df_limpio = obtener_datos()
     orden_parking = ["0", "1", "2", "3", "4", "5+"]
     n_cols = 2
     n_rows = 3
@@ -354,6 +360,7 @@ def grafico6(request):
     return render(request, "analisis/grafico_simple.html", {"grafico": grafico, "titulo": "Precio según estacionamientos", "numero": 6})
 
 def grafico7(request):  
+    df_limpio = obtener_datos()
     sectores = [s for s in df_limpio['Sector'].unique() if s != 'Sin clasificar']
     orden_sectores = ['Oriente', 'Centro', 'Sur', 'Suroriente', 'Norte', 'Poniente / Periferia']
     sectores = [s for s in orden_sectores if s in sectores] + [s for s in sectores if s not in orden_sectores]
@@ -416,6 +423,7 @@ def grafico7(request):
               {"grafico": grafico, "titulo": "Corredor por comuna y sector", "numero": 7})
 
 def grafico8(request):
+    df_limpio = obtener_datos()
     precio_promedio = df_limpio.groupby('Con_Corredor')[COL_PRECIO].mean().reindex(['Con Corredor', 'Sin Corredor'])
     diferencia_pct = (precio_promedio['Con Corredor'] / precio_promedio['Sin Corredor'] - 1) * 100
 
@@ -446,8 +454,8 @@ def grafico8(request):
               {"grafico": grafico, "titulo": "Corredor: comparación global", "numero": 8})
 
 def grafico9(request):
+    df_limpio = obtener_datos()
     fig, ax = plt.subplots(figsize=(10, 12))
-    df_limpio["Precio_m2"] = df_limpio["Price_CLP"] / df_limpio["Total Area"]
     precio_m2_comuna = df_limpio.groupby("Comuna")["Precio_m2"].mean().sort_values(ascending=False)
     precio_m2_comuna.plot(
         kind="barh",
@@ -564,24 +572,38 @@ INFORMES[10] = {
 }
 
 
-def fmt(valor, decimales=0):
-    """Formato chileno: 1.234.567 o 1.234,5"""
+def fmt(valor, decimales=0, signo=False):
+    """Formato chileno: 1.234.567 o 1.234,5 (con signo=True: +12,3)"""
     if pd.isna(valor):
         return "—"
-    texto = f"{valor:,.{decimales}f}"
+    texto = f"{valor:{'+' if signo else ''},.{decimales}f}"
     return texto.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def tabla_informe(numero, get=None):
-    """Devuelve (columnas, filas) con los datos de apoyo de cada informe."""
-    df = df_limpio
+def formato(decimales=0, prefijo="", signo=False):
+    """Cómo se muestra una columna numérica (en pantalla, PDF y Excel)."""
+    return {"decimales": decimales, "prefijo": prefijo, "signo": signo}
+
+
+CLP = formato(0, "$ ")   # pesos chilenos sin decimales
+ENTERO = formato(0)
+
+
+def tabla_numerica(numero, get=None):
+    """Datos de apoyo de cada informe, con valores numéricos (sin formato).
+
+    Devuelve (tabla, formatos):
+      - tabla: DataFrame con las columnas tal como se muestran en el informe.
+      - formatos: cómo mostrar cada columna numérica.
+    Es la ÚNICA fuente de la tabla: la usan la página del informe, el PDF y el
+    Excel, por eso los tres muestran siempre los mismos datos.
+    """
+    df = obtener_datos()
 
     if numero == 10:
         g, _, _ = datos_dinamico(get)
-        filas = [[r["Comuna"], r["Sector"], fmt(r["Publicaciones"]),
-                  fmt(r["Precio promedio (UF)"], 1), fmt(r["Precio mediano (UF)"], 1)]
-                 for _, r in g.iterrows()]
-        return list(g.columns), filas
+        return g, {"Publicaciones": ENTERO, "Precio promedio (UF)": formato(1),
+                   "Precio mediano (UF)": formato(1)}
 
     if numero == 1:
         variables = {"Price_UF": "Precio (UF)", "Dorms": "Dormitorios", "Baths": "Baños",
@@ -590,65 +612,112 @@ def tabla_informe(numero, get=None):
         filas = []
         for col, nombre in variables.items():
             s = df[col].astype(float)
-            filas.append([nombre, fmt(s.mean(), 1), fmt(s.median(), 1), fmt(s.min(), 1),
-                          fmt(s.max(), 1), fmt(s.skew(), 2)])
-        return ["Variable", "Promedio", "Mediana", "Mínimo", "Máximo", "Asimetría"], filas
+            filas.append([nombre, s.mean(), s.median(), s.min(), s.max(), s.skew()])
+        t = pd.DataFrame(filas, columns=["Variable", "Promedio", "Mediana", "Mínimo", "Máximo", "Asimetría"])
+        return t, {"Promedio": formato(1), "Mediana": formato(1), "Mínimo": formato(1),
+                   "Máximo": formato(1), "Asimetría": formato(2)}
 
     if numero == 2:
-        conteo = df["Comuna"].value_counts()
-        pct = df["Comuna"].value_counts(normalize=True) * 100
-        filas = [[c, fmt(conteo[c]), fmt(pct[c], 1) + " %"] for c in conteo.head(10).index]
-        return ["Comuna", "Publicaciones", "Porcentaje"], filas
+        conteo = df["Comuna"].value_counts().head(10)
+        t = pd.DataFrame({"Comuna": conteo.index, "Publicaciones": conteo.values,
+                          "Porcentaje (%)": conteo.values / len(df) * 100})
+        return t, {"Publicaciones": ENTERO, "Porcentaje (%)": formato(1)}
 
     if numero == 3:
         g = df.groupby("Sector")["Price_UF"].agg(["mean", "median", "count"])
         g = g.reindex([s for s in ORDEN_SECTORES if s in g.index])
-        filas = [[s, fmt(r["mean"]), fmt(r["median"]), fmt(r["count"])] for s, r in g.iterrows()]
-        return ["Sector", "Promedio (UF)", "Mediana (UF)", "Propiedades"], filas
+        t = g.reset_index()
+        t.columns = ["Sector", "Promedio (UF)", "Mediana (UF)", "Propiedades"]
+        return t, {"Promedio (UF)": ENTERO, "Mediana (UF)": ENTERO, "Propiedades": ENTERO}
 
     if numero == 4:
         prom = df.groupby("Comuna")["Price_UF"].mean().sort_values(ascending=False)
-        filas = [["Más caras", c, fmt(v)] for c, v in prom.head(5).items()]
-        filas += [["Más baratas", c, fmt(v)] for c, v in prom.tail(5).iloc[::-1].items()]
-        return ["Grupo", "Comuna", "Precio promedio (UF)"], filas
+        filas = [["Más caras", c, v] for c, v in prom.head(5).items()]
+        filas += [["Más baratas", c, v] for c, v in prom.tail(5).iloc[::-1].items()]
+        t = pd.DataFrame(filas, columns=["Grupo", "Comuna", "Precio promedio (UF)"])
+        return t, {"Precio promedio (UF)": ENTERO}
 
     if numero == 5:
         g = df.groupby("Rango_Dorms", observed=True)["Price_CLP"].agg(["mean", "count"])
-        filas = [[("1 dormitorio" if r == "1" else f"{r} dormitorios"), "$ " + fmt(v["mean"]), fmt(v["count"])]
-                 for r, v in g.iterrows()]
-        return ["Rango", "Precio promedio (CLP)", "Propiedades"], filas
+        t = pd.DataFrame({
+            "Rango": [("1 dormitorio" if r == "1" else f"{r} dormitorios") for r in g.index],
+            "Precio promedio (CLP)": g["mean"].values,
+            "Propiedades": g["count"].values,
+        })
+        return t, {"Precio promedio (CLP)": CLP, "Propiedades": ENTERO}
 
     if numero == 6:
         orden = ["0", "1-2", "3-4", "5+"]
         t = (df.groupby(["Sector", "Rango_Parking"], observed=True)["Price_CLP"]
              .mean().unstack().reindex(columns=orden))
         t = t.reindex([s for s in ORDEN_SECTORES if s in t.index])
-        filas = [[s] + [("$ " + fmt(v)) if pd.notna(v) else "—" for v in fila] for s, fila in t.iterrows()]
-        return ["Sector"] + [f"{o} est." for o in orden], filas
+        t.columns = [f"{o} est. (CLP)" for o in orden]
+        t = t.rename_axis("Sector").reset_index()
+        return t, {c: CLP for c in t.columns[1:]}
 
     if numero == 7:
         t = df.groupby(["Sector", "Con_Corredor"])["Price_UF"].mean().unstack()
         t = t.reindex([s for s in ORDEN_SECTORES if s in t.index])
-        filas = []
-        for s, r in t.iterrows():
-            dif = (r["Con Corredor"] / r["Sin Corredor"] - 1) * 100
-            filas.append([s, fmt(r["Con Corredor"]), fmt(r["Sin Corredor"]), f"{dif:+.1f} %".replace(".", ",")])
-        return ["Sector", "Con corredor (UF)", "Sin corredor (UF)", "Diferencia"], filas
+        t = pd.DataFrame({
+            "Sector": t.index,
+            "Con corredor (UF)": t["Con Corredor"].values,
+            "Sin corredor (UF)": t["Sin Corredor"].values,
+            "Diferencia (%)": ((t["Con Corredor"] / t["Sin Corredor"] - 1) * 100).values,
+        })
+        return t, {"Con corredor (UF)": ENTERO, "Sin corredor (UF)": ENTERO,
+                   "Diferencia (%)": formato(1, signo=True)}
 
     if numero == 8:
         g = df.groupby("Con_Corredor")["Price_UF"].agg(["mean", "count"])
+        g = g.reindex(["Con Corredor", "Sin Corredor"])
         dif = (g.loc["Con Corredor", "mean"] / g.loc["Sin Corredor", "mean"] - 1) * 100
-        filas = [[k, fmt(v["mean"]), fmt(v["count"])] for k, v in g.iterrows()]
-        filas.append(["Diferencia", f"{dif:+.1f} %".replace(".", ","), ""])
-        return ["Grupo", "Precio promedio (UF)", "Propiedades"], filas
+        t = pd.DataFrame({
+            "Grupo": g.index,
+            "Precio promedio (UF)": g["mean"].values,
+            "Propiedades": g["count"].values,
+            # La diferencia se calcula respecto al grupo "Sin Corredor"
+            "Diferencia vs. sin corredor (%)": [dif, None],
+        })
+        return t, {"Precio promedio (UF)": ENTERO, "Propiedades": ENTERO,
+                   "Diferencia vs. sin corredor (%)": formato(1, signo=True)}
 
     if numero == 9:
-        prom = (df["Price_CLP"] / df["Total Area"]).groupby(df["Comuna"]).mean().sort_values(ascending=False)
-        filas = [["Más caras", c, "$ " + fmt(v)] for c, v in prom.head(5).items()]
-        filas += [["Más baratas", c, "$ " + fmt(v)] for c, v in prom.tail(5).iloc[::-1].items()]
-        return ["Grupo", "Comuna", "Precio por m² (CLP)"], filas
+        prom = df.groupby("Comuna")["Precio_m2"].mean().sort_values(ascending=False)
+        filas = [["Más caras", c, v] for c, v in prom.head(5).items()]
+        filas += [["Más baratas", c, v] for c, v in prom.tail(5).iloc[::-1].items()]
+        t = pd.DataFrame(filas, columns=["Grupo", "Comuna", "Precio por m² (CLP)"])
+        return t, {"Precio por m² (CLP)": CLP}
 
-    return [], []
+    return pd.DataFrame(), {}
+
+
+def tabla_redondeada(numero, get=None):
+    """tabla_numerica() con cada columna redondeada a los decimales que se muestran.
+    La usan tanto la página/PDF como el Excel, así los valores coinciden exactamente."""
+    t, formatos = tabla_numerica(numero, get)
+    t = t.copy()
+    for columna, f in formatos.items():
+        t[columna] = pd.to_numeric(t[columna]).round(f["decimales"])
+    return t, formatos
+
+
+def tabla_informe(numero, get=None):
+    """Devuelve (columnas, filas) como texto con formato chileno, para la página y el PDF."""
+    t, formatos = tabla_redondeada(numero, get)
+    filas = []
+    for _, fila in t.iterrows():
+        celdas = []
+        for columna in t.columns:
+            valor = fila[columna]
+            f = formatos.get(columna)
+            if f is None:                       # columna de texto (comuna, sector...)
+                celdas.append(str(valor))
+            elif pd.isna(valor):
+                celdas.append("—")
+            else:
+                celdas.append(f["prefijo"] + fmt(valor, f["decimales"], f["signo"]))
+        filas.append(celdas)
+    return list(t.columns), filas
 
 
 def informe(request, numero):
@@ -676,83 +745,49 @@ from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
 
-def datos_grafico(numero, get=None):
-    """DataFrame con los datos que usa cada gráfico (valores numéricos, sin formato)."""
-    df = df_limpio
-
-    if numero == 10:
-        return datos_dinamico(get)[0]
-
-    if numero == 1:
-        return df[["Price_UF", "Built Area", "Dorms", "Baths"]]
-
-    if numero == 2:
-        return (df["Comuna"].value_counts().head(10)
-                .rename_axis("Comuna").reset_index(name="Publicaciones"))
-
-    if numero == 3:
-        return df[["Sector", "Comuna", "Price_UF"]]
-
-    if numero == 4:
-        return (df.groupby("Comuna")
-                .agg(Sector=("Sector", "first"), Precio_promedio_UF=("Price_UF", "mean"))
-                .reset_index())
-
-    if numero == 5:
-        g = df.groupby("Rango_Dorms", observed=True)["Price_CLP"].mean() / 1_000_000
-        g = g.rename("Precio promedio (millones de CLP)").reset_index()
-        g["Rango_Dorms"] = g["Rango_Dorms"].astype(str)
-        return g
-
-    if numero == 6:
-        t = (df.groupby(["Sector", "Rango_Parking"], observed=True)["Price_CLP"]
-             .mean().unstack())
-        t.columns = [f"{c} estacionamientos (CLP)" for c in t.columns]
-        return t.reset_index()
-
-    if numero == 7:
-        t = (df.groupby(["Sector", "Comuna", "Con_Corredor"])["Price_UF"]
-             .mean().unstack("Con_Corredor"))
-        t.columns.name = None
-        return t.reset_index()
-
-    if numero == 8:
-        g = df.groupby("Con_Corredor")["Price_UF"].mean()
-        g = g.reindex(["Con Corredor", "Sin Corredor"])
-        return g.rename("Precio promedio (UF)").reset_index()
-
-    if numero == 9:
-        g = df.groupby("Comuna")["Precio_m2"].mean().sort_values(ascending=False)
-        return g.rename("Precio promedio por m2 (CLP)").reset_index()
-
-    return pd.DataFrame()
+def formato_excel(f):
+    """Traduce un formato de columna al formato numérico de Excel (ej: "$ "#,##0)."""
+    patron = "#,##0" + ("." + "0" * f["decimales"] if f["decimales"] else "")
+    if f["prefijo"]:
+        patron = f'"{f["prefijo"]}"' + patron
+    if f["signo"]:
+        patron = f"+{patron};-{patron};{patron}"
+    return patron
 
 
 def informe_excel(request, numero):
     if numero not in INFORMES:
         raise Http404("Informe no encontrado")
-    datos = datos_grafico(numero, request.GET).round(2)
+    # Misma tabla que el informe en pantalla, pero con números de verdad (no texto)
+    tabla, formatos = tabla_redondeada(numero, request.GET)
 
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as escritor:
-        datos.to_excel(escritor, sheet_name="Datos del gráfico", index=False)
+        tabla.to_excel(escritor, sheet_name="Datos del reporte", index=False)
+        hoja = escritor.sheets["Datos del reporte"]
+        hoja.freeze_panes = "A2"   # deja fija la fila de títulos
+
+        for i, columna in enumerate(tabla.columns, start=1):
+            celdas = hoja.iter_rows(min_row=2, min_col=i, max_col=i)
+            if columna in formatos:   # formato de miles, decimales y "$" en cada celda
+                for (celda,) in celdas:
+                    celda.number_format = formato_excel(formatos[columna])
+            # ancho de la columna según su contenido
+            largo = max([len(str(columna))] + [len(str(v)) for v in tabla[columna].head(200)])
+            hoja.column_dimensions[hoja.cell(row=1, column=i).column_letter].width = min(largo + 4, 45)
+
         if numero == 10:   # segunda hoja con los filtros que se usaron
-            pd.DataFrame({"Filtro": list(filtros_texto(request.GET).keys()),
-                          "Valor": list(filtros_texto(request.GET).values())}
+            textos = filtros_texto(request.GET)
+            pd.DataFrame({"Filtro": list(textos.keys()), "Valor": list(textos.values())}
                          ).to_excel(escritor, sheet_name="Filtros aplicados", index=False)
             escritor.sheets["Filtros aplicados"].column_dimensions["A"].width = 28
             escritor.sheets["Filtros aplicados"].column_dimensions["B"].width = 30
-        hoja = escritor.sheets["Datos del gráfico"]
-        hoja.freeze_panes = "A2"   # deja fija la fila de títulos
-        for columna in hoja.columns:   # ancho de cada columna según su contenido
-            largo = max(len(str(celda.value)) for celda in columna[:200] if celda.value is not None)
-            hoja.column_dimensions[columna[0].column_letter].width = min(largo + 3, 45)
 
     respuesta = HttpResponse(
         buffer.getvalue(),
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
-    respuesta["Content-Disposition"] = f'attachment; filename="grafico_{numero}_datos.xlsx"'
+    respuesta["Content-Disposition"] = f'attachment; filename="informe_{numero}.xlsx"'
     return respuesta
 
 
@@ -811,8 +846,8 @@ def informe_pdf(request, numero):
 # ===================================================================
 # GRÁFICO DINÁMICO (10): el usuario elige filtros y los datos se actualizan
 # ===================================================================
-SECTORES = [s for s in ORDEN_SECTORES if s in set(df_limpio["Sector"].dropna())]
-RANGOS_DORMS = [str(c) for c in df_limpio["Rango_Dorms"].cat.categories]
+SECTORES = ORDEN_SECTORES                  # valores válidos para el filtro de sector
+RANGOS_DORMS = ["1", "2-3", "4-6", "6+"]   # mismas etiquetas que Rango_Dorms en CargaDatos.py
 
 
 def _numero(texto):
@@ -859,7 +894,7 @@ def contexto_filtros(get):
 def datos_dinamico(get):
     """Filtra df_limpio y agrupa por comuna. Devuelve (tabla, filtros, n_publicaciones)."""
     f = leer_filtros(get)
-    df = df_limpio
+    df = obtener_datos()
     if f["sector"]:
         df = df[df["Sector"] == f["sector"]]
     if f["dorms"]:
