@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -23,9 +24,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-ixf2dfgca!pna64k=b&h69e+%w!i)+0101*pd4$r8o9s51-uyr'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# En el servidor de AWS se puede apagar con:  export DJANGO_DEBUG=False
+DEBUG = os.environ.get("DJANGO_DEBUG", "True") == "True"
 
-ALLOWED_HOSTS = []
+# Direcciones desde las que se puede acceder al sitio.
+# En AWS se agrega la IP pública (o el dominio) de la instancia con:
+#   export DJANGO_ALLOWED_HOSTS=54.123.45.67
+ALLOWED_HOSTS = ["127.0.0.1", "localhost"] + [
+    host.strip() for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if host.strip()
+]
 
 
 # Application definition
